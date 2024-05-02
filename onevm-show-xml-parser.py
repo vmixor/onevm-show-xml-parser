@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-# https://www.edureka.co/blog/python-xml-parser-tutorial/#xml.etree
+# onevm-show-xml-parser.py - Utility for "onevm show --xml <VM_ID>"
+# output parsing, this version supports OpenNebula 5.8
 
 import xml.etree.ElementTree as ET
 from enum import Enum
 from subprocess import run, PIPE
-from sys import argv
+from sys import argv, stderr
 
-# Enums from:
+# Next 2 enums are from:
 # https://github.com/OpenNebula/one/blob/one-5.8/include/VirtualMachine.h
 class VmState(Enum):
     PENDING         = 1
@@ -100,32 +101,31 @@ class disks_raw(Enum):
     none = 0
     present = 1
 
+ONEVM_COMMAND = "onevm"
+SEPARATOR = ","
+
 for i in range(1,len(argv)):
     id = argv[i]
+    # https://www.edureka.co/blog/python-xml-parser-tutorial/#xml.etree
     # xmltree = ET.parse("data/" + id + ".xml")
     # xmlroot = xmltree.getroot()
-    p = run(['./onevm', 'show', '--xml', id], stdout=PIPE, stderr=PIPE)
+    p = run([ONEVM_COMMAND, "show", "--xml", id], stdout=PIPE, stderr=PIPE)
     if p.returncode != 0:
-        print('Something went wrong: ', p.stderr.decode())
+        print("Error: ", p.stderr.decode(), file=stderr)
         continue
     xmlroot = ET.fromstring(p.stdout.decode())
     name = xmlroot.find("NAME").text
     owner = xmlroot.find("UNAME").text
     state = VmState(int(xmlroot.find("STATE").text))
     lcm_state = LcmState(int(xmlroot.find("LCM_STATE").text))
-    print(state)
-    print(lcm_state)
-
     ide = disks_ide.none
     raw = disks_raw.none
     for disk in xmlroot.find("TEMPLATE").findall("DISK"):
         if disk.find("TYPE").text != "CDROM":
             if disk.find("DEV_PREFIX").text == "hd" or disk.find("DEV_PREFIX").text == "sd":
                 ide = disks_ide.present
-            if disk.find("DRIVER").text == "raw":
+            driver = disk.find("DRIVER")
+            if driver == None or driver.text == "raw":
                 raw = disks_raw.present
-        print(disk.find("DEV_PREFIX").text)
-        print(disk.find("DRIVER").text)
-        print(disk.find("TYPE").text)
-    print(ide)
-    print(raw)
+    row = [owner, id, name, state.__str__(), lcm_state.__str__(), ide.__str__(), raw.__str__()]
+    print(SEPARATOR.join(row))
